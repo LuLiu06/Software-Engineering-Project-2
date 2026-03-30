@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="CENTER" spacing="20" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" 
+      fx:controller="org.example.TravelExpensesController" style="-fx-background-color: #f5f5f5;">
+    <padding>
+        <Insets bottom="30" left="40" right="40" top="30"/>
+    </padding>
+
+    <!-- Title -->
+    <Label fx:id="lblTitle" text="Travel Expenses Calculator" style="-fx-font-weight: bold; -fx-text-fill: #333;">
+        <font>
+            <Font size="24"/>
+        </font>
+    </Label>
+
+    <!-- Language Selection Buttons -->
+    <HBox alignment="CENTER" spacing="10">
+        <Button fx:id="btnEN" text="EN" onAction="#handleEnglish" prefWidth="60" 
+                style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;"/>
+        <Button fx:id="btnFR" text="FR" onAction="#handleFrench" prefWidth="60"
+                style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;"/>
+        <Button fx:id="btnJP" text="JP" onAction="#handleJapanese" prefWidth="60"
+                style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;"/>
+        <Button fx:id="btnIR" text="IR" onAction="#handlePersian" prefWidth="60"
+                style="-fx-background-color: #9C27B0; -fx-text-fill: white; -fx-font-weight: bold;"/>
+    </HBox>
+
+    <!-- Input Form -->
+    <GridPane hgap="15" vgap="15" alignment="CENTER">
+        <Label fx:id="lblDistance" text="Distance (km):" GridPane.columnIndex="0" GridPane.rowIndex="0"
+               style="-fx-font-size: 14px;"/>
+        <TextField fx:id="txtDistance" promptText="Enter distance" prefWidth="200" 
+                   GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+
+        <Label fx:id="lblConsumption" text="Fuel Consumption (L/100 km):" GridPane.columnIndex="0" GridPane.rowIndex="1"
+               style="-fx-font-size: 14px;"/>
+        <TextField fx:id="txtConsumption" promptText="Enter consumption" prefWidth="200"
+                   GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+
+        <Label fx:id="lblPrice" text="Fuel Price (per liter):" GridPane.columnIndex="0" GridPane.rowIndex="2"
+               style="-fx-font-size: 14px;"/>
+        <TextField fx:id="txtPrice" promptText="Enter price" prefWidth="200"
+                   GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+    </GridPane>
+
+    <!-- Calculate Button -->
+    <Button fx:id="btnCalculate" text="Calculate Trip Cost" onAction="#handleCalculate" prefWidth="200" prefHeight="40"
+            style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+
+    <!-- Result Label -->
+    <Label fx:id="lblResult" text="" style="-fx-font-size: 16px; -fx-text-fill: #1976D2; -fx-font-weight: bold;"
+           wrapText="true" maxWidth="400" alignment="CENTER"/>
+
+</VBox>
