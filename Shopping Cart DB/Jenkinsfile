@@ -27,6 +27,8 @@ pipeline {
 
     environment {
         DOCKER_IMAGE_NAME = 'shopping-cart-db'
+        // This repo’s pom.xml and Dockerfile live under this folder; workspace root is the mono-repo.
+        PROJECT_DIR = 'Shopping Cart DB'
     }
 
     tools {
@@ -59,7 +61,9 @@ pipeline {
         stage('Build, Test & Coverage') {
             steps {
                 echo 'Running tests and generating JaCoCo report for SonarQube...'
-                sh 'mvn -B clean verify'
+                dir("${env.PROJECT_DIR}") {
+                    sh 'mvn -B clean verify'
+                }
             }
             post {
                 always {
@@ -72,11 +76,13 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 echo 'Publishing analysis to SonarQube...'
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    sh '''
-                        SONAR_URL="${SONAR_HOST_URL:-http://127.0.0.1:9000}"
-                        mvn -B sonar:sonar -Dsonar.host.url="$SONAR_URL" -Dsonar.token="$SONAR_TOKEN"
-                    '''
+                dir("${env.PROJECT_DIR}") {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            SONAR_URL="${SONAR_HOST_URL:-http://127.0.0.1:9000}"
+                            mvn -B sonar:sonar -Dsonar.host.url="$SONAR_URL" -Dsonar.token="$SONAR_TOKEN"
+                        '''
+                    }
                 }
             }
         }
@@ -84,7 +90,9 @@ pipeline {
         stage('Archive JAR') {
             steps {
                 echo 'Archiving shaded JAR...'
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                dir("${env.PROJECT_DIR}") {
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                }
             }
         }
 
@@ -92,14 +100,16 @@ pipeline {
         // (those earlier stages still need sonar-token for Sonar).
         stage('Build and Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKERHUB_USR', passwordVariable: 'DOCKERHUB_PSW')]) {
-                    script {
-                        env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
-                        docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
-                        docker.build("${env.DOCKER_HUB_REPO}:latest")
-                        docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                            docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
-                            docker.image("${env.DOCKER_HUB_REPO}:latest").push()
+                dir("${env.PROJECT_DIR}") {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKERHUB_USR', passwordVariable: 'DOCKERHUB_PSW')]) {
+                        script {
+                            env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
+                            docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
+                            docker.build("${env.DOCKER_HUB_REPO}:latest")
+                            docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                                docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
+                                docker.image("${env.DOCKER_HUB_REPO}:latest").push()
+                            }
                         }
                     }
                 }
