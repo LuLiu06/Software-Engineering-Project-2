@@ -1,10 +1,32 @@
 pipeline {
     agent any
 
+    /*
+     * Checkout: `checkout scm` only works when this job is "Pipeline script from SCM" or Multibranch.
+     * If you paste the script manually, set parameters GIT_REPO_URL + GIT_BRANCH (Build with Parameters),
+     * or switch the job to Pipeline from SCM pointing at this repo.
+     */
+    parameters {
+        string(
+                name: 'GIT_REPO_URL',
+                defaultValue: '',
+                description: 'Leave empty for Multibranch / Pipeline from SCM. Otherwise HTTPS Git URL of this project.'
+        )
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Branch to clone when GIT_REPO_URL is set')
+    }
+
+    /*
+     * Do NOT load Docker Hub credentials here with credentials(...).
+     * If the credential ID is missing, Jenkins fails before any stage runs and no workspace exists;
+     * then post { cleanWs() } throws MissingContextVariableException (no FilePath).
+     *
+     * Jenkins → Manage Jenkins → Credentials:
+     *   - ID: docker-hub-credentials   Type: Username with password (Docker Hub login)
+     *   - ID: sonar-token              Type: Secret text (SonarQube token)
+     */
+
     environment {
-        DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
         DOCKER_IMAGE_NAME = 'shopping-cart-db'
-        DOCKER_HUB_REPO = "${DOCKER_HUB_CREDENTIALS_USR}/${DOCKER_IMAGE_NAME}"
     }
 
     tools {
@@ -16,21 +38,28 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out source code...'
-                checkout scm
+                script {
+                    def url = (params.GIT_REPO_URL ?: '').trim()
+                    def branch = (params.GIT_BRANCH ?: 'main').trim()
+                    if (url) {
+                        checkout([
+                                $class                           : 'GitSCM',
+                                branches                         : [[name: "*/${branch}"]]],
+                                extensions                       : [],
+                                userRemoteConfigs                : [[url: url]]
+                        ])
+                    } else {
+                        checkout scm
+                    }
+                }
             }
         }
 
-        stage('Build') {
+        // Week 5: JaCoCo report is bound to the verify phase (see pom.xml)
+        stage('Build, Test & Coverage') {
             steps {
-                echo 'Building the application...'
-                sh 'mvn clean compile'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo 'Running unit tests...'
-                sh 'mvn test'
+                echo 'Running tests and generating JaCoCo report for SonarQube...'
+                sh 'mvn -B clean verify'
             }
             post {
                 always {
@@ -39,35 +68,39 @@ pipeline {
             }
         }
 
-        stage('Package') {
+        // Week 5: quality analysis in Jenkins (token must not be committed — store as Secret text)
+        stage('SonarQube Analysis') {
             steps {
-                echo 'Packaging the application...'
-                sh 'mvn package -DskipTests'
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                echo 'Publishing analysis to SonarQube...'
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        SONAR_URL="${SONAR_HOST_URL:-http://127.0.0.1:9000}"
+                        mvn -B sonar:sonar -Dsonar.host.url="$SONAR_URL" -Dsonar.token="$SONAR_TOKEN"
+                    '''
                 }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Archive JAR') {
             steps {
-                echo 'Building Docker image...'
-                script {
-                    docker.build("${DOCKER_HUB_REPO}:${BUILD_NUMBER}")
-                    docker.build("${DOCKER_HUB_REPO}:latest")
-                }
+                echo 'Archiving shaded JAR...'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
 
-        stage('Push to Docker Hub') {
+        // Credentials resolved only here: Checkout/Test/Sonar can run even if this ID was mis-typed
+        // (those earlier stages still need sonar-token for Sonar).
+        stage('Build and Push Docker Image') {
             steps {
-                echo 'Pushing Docker image to Docker Hub...'
-                script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                        docker.image("${DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
-                        docker.image("${DOCKER_HUB_REPO}:latest").push()
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKERHUB_USR', passwordVariable: 'DOCKERHUB_PSW')]) {
+                    script {
+                        env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
+                        docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
+                        docker.build("${env.DOCKER_HUB_REPO}:latest")
+                        docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                            docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
+                            docker.image("${env.DOCKER_HUB_REPO}:latest").push()
+                        }
                     }
                 }
             }
@@ -77,14 +110,22 @@ pipeline {
     post {
         always {
             echo 'Cleaning up workspace...'
-            cleanWs()
+            script {
+                try {
+                    cleanWs()
+                } catch (Throwable t) {
+                    echo "Workspace cleanup skipped (no workspace or cleanWs error): ${t.message}"
+                }
+            }
         }
         success {
             echo 'Pipeline completed successfully!'
-            echo "Docker image pushed: ${DOCKER_HUB_REPO}:${BUILD_NUMBER}"
+            echo "Docker image pushed: ${env.DOCKER_HUB_REPO ?: '(set after Docker stage)'}:${BUILD_NUMBER}"
         }
         failure {
             echo 'Pipeline failed. Please check the logs for details.'
+            echo 'Common fixes: create credential ID docker-hub-credentials (Username+password) and sonar-token (Secret text).'
+            echo 'Checkout: use job type "Pipeline script from SCM", or run with parameters GIT_REPO_URL + GIT_BRANCH (see Jenkinsfile comment).'
         }
     }
 }

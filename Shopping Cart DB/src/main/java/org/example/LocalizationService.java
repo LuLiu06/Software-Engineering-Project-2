@@ -6,45 +6,49 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Service class for fetching localized UI strings from the database.
  */
 public class LocalizationService {
-    
+
+    private static final Logger LOG = Logger.getLogger(LocalizationService.class.getName());
+
     private final DatabaseConnection dbConnection;
     private Map<String, String> localizedStrings;
     private String currentLanguage;
-    
+
     public LocalizationService() {
         this.dbConnection = DatabaseConnection.getInstance();
         this.localizedStrings = new HashMap<>();
         this.currentLanguage = "en_US";
     }
-    
+
     public LocalizationService(DatabaseConnection dbConnection) {
         this.dbConnection = dbConnection;
         this.localizedStrings = new HashMap<>();
         this.currentLanguage = "en_US";
     }
-    
+
     /**
      * Loads localized strings from the database for the specified language.
-     * 
+     *
      * @param language the language code (e.g., "en_US", "fi_FI", "sv_SE", "ja_JP")
      * @return Map of key-value pairs for the localized strings
      */
     public Map<String, String> loadStrings(String language) {
         this.currentLanguage = language;
         this.localizedStrings = new HashMap<>();
-        
-        String sql = "SELECT `key`, value FROM localization_strings WHERE language = ?";
-        
+
+        String sql = "SELECT `key`, `value` FROM localization_strings WHERE language = ?";
+
         try (Connection conn = dbConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
+
             stmt.setString(1, language);
-            
+
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
                     String key = rs.getString("key");
@@ -52,43 +56,43 @@ public class LocalizationService {
                     localizedStrings.put(key, value);
                 }
             }
-            
+
         } catch (SQLException e) {
-            System.err.println("Error loading localization strings: " + e.getMessage());
+            LOG.log(Level.WARNING, "Error loading localization strings", e);
             loadDefaultStrings();
         }
-        
+
         if (localizedStrings.isEmpty()) {
             loadDefaultStrings();
         }
-        
+
         return localizedStrings;
     }
-    
+
     /**
      * Gets a localized string by key.
-     * 
+     *
      * @param key the message key
      * @return the localized string, or the key if not found
      */
     public String getString(String key) {
         return localizedStrings.getOrDefault(key, key);
     }
-    
+
     /**
      * Gets the current language.
      */
     public String getCurrentLanguage() {
         return currentLanguage;
     }
-    
+
     /**
      * Gets all localized strings.
      */
     public Map<String, String> getLocalizedStrings() {
         return new HashMap<>(localizedStrings);
     }
-    
+
     /**
      * Loads default English strings as fallback.
      */
@@ -106,32 +110,32 @@ public class LocalizationService {
         localizedStrings.put("cart.saved", "Shopping cart saved to database!");
         localizedStrings.put("cart.save.error", "Error saving cart to database.");
     }
-    
+
     /**
      * Gets available languages from the database.
-     * 
+     *
      * @return array of available language codes
      */
     public String[] getAvailableLanguages() {
         String sql = "SELECT DISTINCT language FROM localization_strings ORDER BY language";
         java.util.List<String> languages = new java.util.ArrayList<>();
-        
+
         try (Connection conn = dbConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
-            
+
             while (rs.next()) {
                 languages.add(rs.getString("language"));
             }
-            
+
         } catch (SQLException e) {
-            System.err.println("Error fetching available languages: " + e.getMessage());
+            LOG.log(Level.WARNING, "Error fetching available languages", e);
         }
-        
+
         if (languages.isEmpty()) {
             return new String[]{"en_US", "fi_FI", "sv_SE", "ja_JP"};
         }
-        
+
         return languages.toArray(new String[0]);
     }
 }
