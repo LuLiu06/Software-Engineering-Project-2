@@ -111,10 +111,14 @@ pipeline {
                                 env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
                                 docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
                                 docker.build("${env.DOCKER_HUB_REPO}:latest")
-                                docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                                    docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
-                                    docker.image("${env.DOCKER_HUB_REPO}:latest").push()
-                                }
+                                // docker.withRegistry uses Jenkins Launcher without our PATH — docker login then fails with ENOENT on macOS agents
+                                sh """
+                                    set -e
+                                    export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:\${PATH}"
+                                    echo "\${DOCKERHUB_PSW}" | docker login -u "\${DOCKERHUB_USR}" --password-stdin https://registry.hub.docker.com
+                                    docker push "${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}"
+                                    docker push "${env.DOCKER_HUB_REPO}:latest"
+                                """
                             }
                         }
                     }
