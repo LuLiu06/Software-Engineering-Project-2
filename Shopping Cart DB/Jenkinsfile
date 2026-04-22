@@ -29,6 +29,8 @@ pipeline {
         DOCKER_IMAGE_NAME = 'shopping-cart-db'
         // This repo’s pom.xml and Dockerfile live under this folder; workspace root is the mono-repo.
         PROJECT_DIR = 'Shopping Cart DB'
+        // macOS: Jenkins often runs with a minimal PATH — add common Docker Desktop / Homebrew locations
+        PATH = "/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:${env.PATH}"
     }
 
     tools {
@@ -101,14 +103,18 @@ pipeline {
         stage('Build and Push Docker Image') {
             steps {
                 dir("${env.PROJECT_DIR}") {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKERHUB_USR', passwordVariable: 'DOCKERHUB_PSW')]) {
-                        script {
-                            env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
-                            docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
-                            docker.build("${env.DOCKER_HUB_REPO}:latest")
-                            docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                                docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
-                                docker.image("${env.DOCKER_HUB_REPO}:latest").push()
+                    // Jenkins (especially launchd on macOS) often starts with a tiny PATH — docker lives in /usr/local/bin
+                    withEnv(["PATH=/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:${env.PATH}"]) {
+                        sh 'docker version'
+                        withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKERHUB_USR', passwordVariable: 'DOCKERHUB_PSW')]) {
+                            script {
+                                env.DOCKER_HUB_REPO = "${DOCKERHUB_USR}/${DOCKER_IMAGE_NAME}"
+                                docker.build("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}")
+                                docker.build("${env.DOCKER_HUB_REPO}:latest")
+                                docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                                    docker.image("${env.DOCKER_HUB_REPO}:${BUILD_NUMBER}").push()
+                                    docker.image("${env.DOCKER_HUB_REPO}:latest").push()
+                                }
                             }
                         }
                     }
@@ -136,6 +142,7 @@ pipeline {
             echo 'Pipeline failed. Please check the logs for details.'
             echo 'Common fixes: create credential ID docker-hub-credentials (Username+password) and sonar-token (Secret text).'
             echo 'Checkout: use job type "Pipeline script from SCM", or run with parameters GIT_REPO_URL + GIT_BRANCH (see Jenkinsfile comment).'
+            echo 'Docker: ensure Docker Desktop is running; Jenkins PATH must include /usr/local/bin (set in Jenkinsfile + Docker stage withEnv).'
         }
     }
 }
