@@ -43,10 +43,10 @@ pipeline {
                     def branch = (params.GIT_BRANCH ?: 'main').trim()
                     if (url) {
                         checkout([
-                                $class                           : 'GitSCM',
-                                branches                         : [[name: "*/${branch}"]]],
-                                extensions                       : [],
-                                userRemoteConfigs                : [[url: url]]
+                                $class           : 'GitSCM',
+                                branches         : [[name: "*/${branch}"]],
+                                extensions       : [],
+                                userRemoteConfigs: [[url: url]]
                         ])
                     } else {
                         checkout scm
